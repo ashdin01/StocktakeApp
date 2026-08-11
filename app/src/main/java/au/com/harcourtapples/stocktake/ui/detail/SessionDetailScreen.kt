@@ -65,7 +65,8 @@ fun SessionDetailScreen(
                         Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        session.deptName?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                        val scopeText = session.supplierName?.let { "Supplier: $it" } ?: session.deptName
+                        scopeText?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                         Text(
                             "${state.counts.size} items counted",
                             style = MaterialTheme.typography.bodyMedium,

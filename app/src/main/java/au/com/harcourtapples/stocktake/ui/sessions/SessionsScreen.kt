@@ -21,6 +21,7 @@ import au.com.harcourtapples.stocktake.StocktakeApplication
 import au.com.harcourtapples.stocktake.api.models.Department
 import au.com.harcourtapples.stocktake.api.models.DeptGroup
 import au.com.harcourtapples.stocktake.api.models.Session
+import au.com.harcourtapples.stocktake.api.models.Supplier
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -102,12 +103,13 @@ fun SessionsScreen(
         NewSessionDialog(
             departments = if (offline) emptyList() else state.departments,
             groups = state.groups,
+            suppliers = if (offline) emptyList() else state.suppliers,
             offline = offline,
             onDismiss = { showNewDialog = false },
             onDeptSelected = { deptId -> vm.loadGroupsForDept(serverUrl, deptId, apiKey) },
-            onCreate = { label, deptId, groupId ->
+            onCreate = { label, deptId, groupId, supplierId ->
                 showNewDialog = false
-                vm.createSession(serverUrl, offline, label, deptId, groupId, apiKey = apiKey, onSuccess = onOpenSession)
+                vm.createSession(serverUrl, offline, label, deptId, groupId, supplierId, apiKey = apiKey, onSuccess = onOpenSession)
             }
         )
     }
@@ -121,6 +123,7 @@ private fun SessionCard(session: Session, onClick: () -> Unit) {
         supportingContent = {
             Column {
                 val scope = when {
+                    session.supplierName != null -> "Supplier: ${session.supplierName}"
                     session.deptName != null && session.groupName != null ->
                         "${session.deptName} > ${session.groupName}"
                     session.deptName != null -> session.deptName
@@ -147,21 +150,30 @@ private fun SessionCard(session: Session, onClick: () -> Unit) {
     )
 }
 
+private enum class StocktakeScopeMode { DEPARTMENT, SUPPLIER }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NewSessionDialog(
     departments: List<Department>,
     groups: List<DeptGroup>,
+    suppliers: List<Supplier>,
     offline: Boolean,
     onDismiss: () -> Unit,
     onDeptSelected: (Int?) -> Unit,
-    onCreate: (String, Int?, Int?) -> Unit
+    onCreate: (String, Int?, Int?, Int?) -> Unit
 ) {
     var label by remember { mutableStateOf("") }
+    var scopeMode by remember { mutableStateOf(StocktakeScopeMode.DEPARTMENT) }
     var selectedDept by remember { mutableStateOf<Department?>(null) }
     var selectedGroup by remember { mutableStateOf<DeptGroup?>(null) }
+    var selectedSupplier by remember { mutableStateOf<Supplier?>(null) }
     var deptExpanded by remember { mutableStateOf(false) }
     var groupExpanded by remember { mutableStateOf(false) }
+    var supplierExpanded by remember { mutableStateOf(false) }
+
+    val canCreate = label.isNotBlank() &&
+        (scopeMode == StocktakeScopeMode.DEPARTMENT || selectedSupplier != null)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -175,7 +187,21 @@ private fun NewSessionDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                if (!offline && departments.isNotEmpty()) {
+                if (!offline && (departments.isNotEmpty() || suppliers.isNotEmpty())) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = scopeMode == StocktakeScopeMode.DEPARTMENT,
+                            onClick = { scopeMode = StocktakeScopeMode.DEPARTMENT },
+                            label = { Text("By Department") }
+                        )
+                        FilterChip(
+                            selected = scopeMode == StocktakeScopeMode.SUPPLIER,
+                            onClick = { scopeMode = StocktakeScopeMode.SUPPLIER },
+                            label = { Text("By Supplier") }
+                        )
+                    }
+                }
+                if (!offline && scopeMode == StocktakeScopeMode.DEPARTMENT && departments.isNotEmpty()) {
                     ExposedDropdownMenuBox(expanded = deptExpanded, onExpandedChange = { deptExpanded = it }) {
                         OutlinedTextField(
                             value = selectedDept?.name ?: "All Departments",
@@ -234,12 +260,43 @@ private fun NewSessionDialog(
                         }
                     }
                 }
+                if (!offline && scopeMode == StocktakeScopeMode.SUPPLIER && suppliers.isNotEmpty()) {
+                    ExposedDropdownMenuBox(expanded = supplierExpanded, onExpandedChange = { supplierExpanded = it }) {
+                        OutlinedTextField(
+                            value = selectedSupplier?.name ?: "",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Supplier") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(supplierExpanded) },
+                            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(expanded = supplierExpanded, onDismissRequest = { supplierExpanded = false }) {
+                            suppliers.forEach { supplier ->
+                                DropdownMenuItem(
+                                    text = { Text(supplier.name) },
+                                    onClick = {
+                                        selectedSupplier = supplier
+                                        supplierExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { if (label.isNotBlank()) onCreate(label.trim(), selectedDept?.id, selectedGroup?.id) },
-                enabled = label.isNotBlank()
+                onClick = {
+                    if (canCreate) {
+                        if (scopeMode == StocktakeScopeMode.SUPPLIER) {
+                            onCreate(label.trim(), null, null, selectedSupplier?.id)
+                        } else {
+                            onCreate(label.trim(), selectedDept?.id, selectedGroup?.id, null)
+                        }
+                    }
+                },
+                enabled = canCreate
             ) { Text("Create") }
         },
         dismissButton = {

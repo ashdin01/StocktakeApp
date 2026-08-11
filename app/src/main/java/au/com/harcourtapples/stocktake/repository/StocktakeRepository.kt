@@ -33,12 +33,12 @@ class StocktakeRepository(
         }
     }
 
-    suspend fun createSession(offline: Boolean, serverUrl: String, apiKey: String = "", label: String, deptId: Int?, groupId: Int? = null): Int {
+    suspend fun createSession(offline: Boolean, serverUrl: String, apiKey: String = "", label: String, deptId: Int?, groupId: Int? = null, supplierId: Int? = null): Int {
         return if (offline) {
             val id = sessionDao.insert(LocalSession(label = label, startedAt = now()))
             id.toInt()
         } else {
-            val resp = ApiClient.service(serverUrl, apiKey).createSession(CreateSessionRequest(label, deptId, groupId))
+            val resp = ApiClient.service(serverUrl, apiKey).createSession(CreateSessionRequest(label, deptId, groupId, supplierId))
             if (resp.isSuccessful) resp.body()?.get("id") ?: throw Exception("No ID in response")
             else throw Exception("Failed to create session: ${resp.code()}")
         }
@@ -151,6 +151,7 @@ class StocktakeRepository(
         label = label,
         deptName = null,
         groupName = null,
+        supplierName = null,
         status = "OPEN",
         startedAt = startedAt,
         closedAt = null,

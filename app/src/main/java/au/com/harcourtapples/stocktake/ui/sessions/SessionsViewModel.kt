@@ -9,6 +9,7 @@ import au.com.harcourtapples.stocktake.api.ApiClient
 import au.com.harcourtapples.stocktake.api.models.Department
 import au.com.harcourtapples.stocktake.api.models.DeptGroup
 import au.com.harcourtapples.stocktake.api.models.Session
+import au.com.harcourtapples.stocktake.api.models.Supplier
 import au.com.harcourtapples.stocktake.repository.StocktakeRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,6 +19,7 @@ data class SessionsUiState(
     val sessions: List<Session> = emptyList(),
     val departments: List<Department> = emptyList(),
     val groups: List<DeptGroup> = emptyList(),
+    val suppliers: List<Supplier> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null
 )
@@ -36,9 +38,14 @@ class SessionsViewModel(private val repo: StocktakeRepository) : ViewModel() {
                     val r = ApiClient.service(serverUrl, apiKey).getDepartments()
                     if (r.isSuccessful) r.body() ?: emptyList() else emptyList()
                 }
+                val suppliers = if (offline) emptyList() else {
+                    val r = ApiClient.service(serverUrl, apiKey).getSuppliers()
+                    if (r.isSuccessful) r.body() ?: emptyList() else emptyList()
+                }
                 _state.value = _state.value.copy(
                     sessions = sessions,
                     departments = depts,
+                    suppliers = suppliers,
                     isLoading = false
                 )
             } catch (e: Exception) {
@@ -66,12 +73,13 @@ class SessionsViewModel(private val repo: StocktakeRepository) : ViewModel() {
         label: String,
         deptId: Int?,
         groupId: Int? = null,
+        supplierId: Int? = null,
         apiKey: String = "",
         onSuccess: (Int) -> Unit
     ) {
         viewModelScope.launch {
             try {
-                val id = repo.createSession(offline, serverUrl, apiKey, label, deptId, groupId)
+                val id = repo.createSession(offline, serverUrl, apiKey, label, deptId, groupId, supplierId)
                 onSuccess(id)
                 load(serverUrl, offline, apiKey)
             } catch (e: Exception) {
